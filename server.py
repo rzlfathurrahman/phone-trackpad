@@ -3,13 +3,7 @@ import socket
 from aiohttp import web
 import Quartz.CoreGraphics as CG
 
-# macOS KeyCodes:
-# Mission Control: Control (59) + Up Arrow (126)
-# App Exposé: Control (59) + Down Arrow (125)
-# Switch Space Left: Control (59) + Left Arrow (123)
-# Switch Space Right: Control (59) + Right Arrow (124)
-# Show Desktop: F11 (103)
-
+# Pre-allocated single Quartz HID event tapping to eliminate overhead
 def post_key_combo(modifier_flag, keycode):
     down = CG.CGEventCreateKeyboardEvent(None, keycode, True)
     up = CG.CGEventCreateKeyboardEvent(None, keycode, False)
@@ -19,23 +13,20 @@ def post_key_combo(modifier_flag, keycode):
     CG.CGEventPost(CG.kCGHIDEventTap, down)
     CG.CGEventPost(CG.kCGHIDEventTap, up)
 
-import subprocess
-
 def trigger_mission_control():
-    subprocess.run(["osascript", "-e", 'tell application "System Events" to key code 126 using control down'])
+    post_key_combo(CG.kCGEventFlagMaskControl, 126)
 
 def trigger_app_expose():
-    subprocess.run(["osascript", "-e", 'tell application "System Events" to key code 125 using control down'])
+    post_key_combo(CG.kCGEventFlagMaskControl, 125)
 
 def trigger_switch_space_left():
-    subprocess.run(["osascript", "-e", 'tell application "System Events" to key code 123 using control down'])
+    post_key_combo(CG.kCGEventFlagMaskControl, 123)
 
 def trigger_switch_space_right():
-    subprocess.run(["osascript", "-e", 'tell application "System Events" to key code 124 using control down'])
+    post_key_combo(CG.kCGEventFlagMaskControl, 124)
 
 def trigger_show_desktop():
-    subprocess.run(["osascript", "-e", 'tell application "System Events" to key code 103'])
-
+    post_key_combo(0, 103)
 
 def quartz_move(dx, dy):
     loc = CG.CGEventGetLocation(CG.CGEventCreate(None))
@@ -69,7 +60,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Mac Trackpad Pro</title>
+  <title>Mac Trackpad Ultra Pro</title>
   <style>
     * { box-sizing: border-box; touch-action: none; user-select: none; -webkit-user-select: none; }
     body, html {
@@ -78,46 +69,47 @@ HTML_CONTENT = """<!DOCTYPE html>
       overflow: hidden; display: flex; flex-direction: column;
     }
     #status-bar {
-      padding: 10px 16px; font-size: 13px; background: #181818;
+      padding: 10px 16px; font-size: 13px; background: #161616;
       display: flex; justify-content: space-between; align-items: center;
-      border-bottom: 1px solid #282828;
+      border-bottom: 1px solid #262626;
     }
     .connected { color: #00e676; font-weight: bold; }
     .disconnected { color: #ff5252; }
     #gesture-hint {
       position: absolute; top: 50px; left: 0; right: 0; text-align: center;
       font-size: 18px; font-weight: bold; color: #00e676; pointer-events: none;
-      opacity: 0; transition: opacity 0.2s ease;
+      opacity: 0; transition: opacity 0.15s ease;
     }
     #pad {
       flex: 1; display: flex; align-items: center; justify-content: center;
-      background: radial-gradient(circle at center, #1f1f1f 0%, #111111 100%);
+      background: radial-gradient(circle at center, #1e1e1e 0%, #101010 100%);
       font-size: 13px; color: #666; text-align: center; line-height: 1.8;
       position: relative;
     }
     #quick-bar {
-      display: flex; height: 42px; background: #141414; border-top: 1px solid #282828;
+      display: flex; height: 44px; background: #141414; border-top: 1px solid #262626;
     }
     .qbtn {
       flex: 1; background: transparent; border: none; border-right: 1px solid #222;
-      color: #888; font-size: 11px; font-weight: 600; text-transform: uppercase;
+      color: #999; font-size: 11px; font-weight: 700; text-transform: uppercase;
+      -webkit-tap-highlight-color: transparent;
     }
     .qbtn:active { background: #333; color: #fff; }
     #buttons {
-      display: flex; height: 75px; border-top: 1px solid #282828;
+      display: flex; height: 75px; border-top: 1px solid #262626;
     }
     .btn {
       flex: 1; display: flex; align-items: center; justify-content: center;
-      background: #1c1c1c; font-size: 15px; font-weight: 700; color: #aaa;
+      background: #1a1a1a; font-size: 15px; font-weight: 700; color: #aaa;
       border: none; outline: none; -webkit-tap-highlight-color: transparent;
     }
     .btn:active { background: #333; color: #fff; }
-    .btn-left { border-right: 1px solid #282828; }
+    .btn-left { border-right: 1px solid #262626; }
   </style>
 </head>
 <body>
   <div id="status-bar">
-    <span>Mac Gestures Pro</span>
+    <span>Trackpad Pro (120Hz Coalesced)</span>
     <span id="status" class="disconnected">Connecting...</span>
   </div>
   <div id="gesture-hint"></div>
@@ -126,7 +118,7 @@ HTML_CONTENT = """<!DOCTYPE html>
     <b>2 Jari:</b> Smooth Scroll & Tap Klik Kanan<br>
     <b>3/4 Jari Geser Atas:</b> Mission Control<br>
     <b>3/4 Jari Geser Bawah:</b> App Exposé<br>
-    <b>3/4 Jari Geser Kiri/Kanan:</b> Pindah Desktop Space
+    <b>3/4 Jari Geser Kiri/Kanan:</b> Pindah Desktop
   </div>
   <div id="quick-bar">
     <button class="qbtn" id="qb-mc">Mission Control</button>
@@ -150,30 +142,25 @@ HTML_CONTENT = """<!DOCTYPE html>
     function showHint(text) {
       hintEl.textContent = text;
       hintEl.style.opacity = '1';
-      setTimeout(() => { hintEl.style.opacity = '0'; }, 800);
+      setTimeout(() => { hintEl.style.opacity = '0'; }, 700);
     }
 
     function connect() {
       ws = new WebSocket(wsUrl);
       ws.binaryType = 'arraybuffer';
       ws.onopen = () => {
-        statusEl.textContent = 'Ultra Gestures Connected';
+        statusEl.textContent = 'Connected (Zero Lag)';
         statusEl.className = 'connected';
       };
       ws.onclose = () => {
         statusEl.textContent = 'Disconnected';
         statusEl.className = 'disconnected';
-        setTimeout(connect, 800);
+        setTimeout(connect, 600);
       };
       ws.onerror = () => ws.close();
     }
     connect();
 
-    // Protocol: [type(uint8), v1(int16), v2(int16)]
-    // 1: move (dx, dy)
-    // 2: scroll (dx, dy)
-    // 3: click (0=left, 1=right)
-    // 4: gesture (1=Mission Control, 2=App Expose, 3=Space Left, 4=Space Right, 5=Desktop)
     const buf = new ArrayBuffer(5);
     const view = new DataView(buf);
 
@@ -183,6 +170,32 @@ HTML_CONTENT = """<!DOCTYPE html>
         view.setInt16(1, v1);
         view.setInt16(3, v2);
         ws.send(buf);
+      }
+    }
+
+    // High refresh rate frame coalescing (120Hz/60Hz rAF sync)
+    let pendingMoveX = 0, pendingMoveY = 0;
+    let pendingScrollX = 0, pendingScrollY = 0;
+    let animFrameRequested = false;
+
+    function flushEvents() {
+      animFrameRequested = false;
+      if (pendingMoveX !== 0 || pendingMoveY !== 0) {
+        sendBinary(1, Math.round(pendingMoveX), Math.round(pendingMoveY));
+        pendingMoveX = 0;
+        pendingMoveY = 0;
+      }
+      if (pendingScrollX !== 0 || pendingScrollY !== 0) {
+        sendBinary(2, Math.round(pendingScrollX), Math.round(pendingScrollY));
+        pendingScrollX = 0;
+        pendingScrollY = 0;
+      }
+    }
+
+    function scheduleFlush() {
+      if (!animFrameRequested) {
+        animFrameRequested = true;
+        requestAnimationFrame(flushEvents);
       }
     }
 
@@ -224,49 +237,50 @@ HTML_CONTENT = """<!DOCTYPE html>
       const center = getCenter(e.touches);
 
       if (maxFingers >= 3) {
-        // Multi-finger Gestures
         if (!gestureTriggered) {
           const deltaX = center.x - startX;
           const deltaY = center.y - startY;
-          const THRESHOLD = 50;
+          const THRESHOLD = 45;
 
           if (Math.abs(deltaY) > THRESHOLD || Math.abs(deltaX) > THRESHOLD) {
             gestureTriggered = true;
             if (Math.abs(deltaY) > Math.abs(deltaX)) {
               if (deltaY < 0) {
                 showHint('Mission Control');
-                sendBinary(4, 1); // Swipe Up
+                sendBinary(4, 1);
               } else {
                 showHint('App Exposé');
-                sendBinary(4, 2); // Swipe Down
+                sendBinary(4, 2);
               }
             } else {
               if (deltaX < 0) {
                 showHint('Desktop Right ▶');
-                sendBinary(4, 4); // Swipe Left = Next Space
+                sendBinary(4, 4);
               } else {
                 showHint('◀ Desktop Left');
-                sendBinary(4, 3); // Swipe Right = Prev Space
+                sendBinary(4, 3);
               }
             }
           }
         }
       } else if (count === 1 && maxFingers === 1) {
-        // 1 Finger Move
         const dx = (center.x - lastX) * 2.2;
         const dy = (center.y - lastY) * 2.2;
         totalMoved += Math.abs(dx) + Math.abs(dy);
         lastX = center.x;
         lastY = center.y;
-        sendBinary(1, Math.round(dx), Math.round(dy));
+        pendingMoveX += dx;
+        pendingMoveY += dy;
+        scheduleFlush();
       } else if (count === 2 && maxFingers === 2) {
-        // 2 Finger Scroll
         const dx = (center.x - lastX) * 1.5;
         const dy = (center.y - lastY) * 1.5;
         totalMoved += Math.abs(dx) + Math.abs(dy);
         lastX = center.x;
         lastY = center.y;
-        sendBinary(2, Math.round(dx), Math.round(dy));
+        pendingScrollX += dx;
+        pendingScrollY += dy;
+        scheduleFlush();
       }
     }, { passive: false });
 
@@ -274,16 +288,17 @@ HTML_CONTENT = """<!DOCTYPE html>
       e.preventDefault();
       if (e.touches.length === 0) {
         const elapsed = performance.now() - touchStartTime;
-        if (!gestureTriggered && elapsed < 250 && totalMoved < 10) {
-          if (maxFingers === 1) sendBinary(3, 0); // Left Click
-          else if (maxFingers === 2) sendBinary(3, 1); // Right Click
+        if (!gestureTriggered && elapsed < 250 && totalMoved < 8) {
+          if (maxFingers === 1) sendBinary(3, 0);
+          else if (maxFingers === 2) sendBinary(3, 1);
         }
         maxFingers = 0;
         gestureTriggered = false;
+        pendingMoveX = 0; pendingMoveY = 0;
+        pendingScrollX = 0; pendingScrollY = 0;
       }
     }, { passive: false });
 
-    // Buttons
     document.getElementById('btn-left').addEventListener('pointerdown', (e) => { e.preventDefault(); sendBinary(3, 0); });
     document.getElementById('btn-right').addEventListener('pointerdown', (e) => { e.preventDefault(); sendBinary(3, 1); });
     document.getElementById('qb-mc').addEventListener('click', () => { showHint('Mission Control'); sendBinary(4, 1); });
@@ -299,6 +314,13 @@ async def handle_index(request):
     return web.Response(text=HTML_CONTENT, content_type='text/html')
 
 async def handle_ws(request):
+    # Disable Nagle algorithm on the underlying TCP socket immediately
+    transport = request.transport
+    if transport:
+        sock = transport.get_extra_info('socket')
+        if sock:
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
     ws = web.WebSocketResponse(autoping=True, heartbeat=10.0)
     await ws.prepare(request)
     
@@ -351,7 +373,7 @@ async def run_server():
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', 8000)
     await site.start()
-    print(f"\\n=== TRACKPAD PRO WITH MAC GESTURES SIAP ===")
+    print(f"\\n=== TRACKPAD ULTRA PRO WITH 120HZ & TCP_NODELAY SIAP ===")
     print(f"Buka di Poco X7: http://{ip}:8000\\n")
     await asyncio.Future()
 
