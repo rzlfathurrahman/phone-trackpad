@@ -1,33 +1,26 @@
 import asyncio
 import json
 import socket
+import subprocess
 from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription
 import Quartz.CoreGraphics as CG
 
-def post_key_combo(modifier_flag, keycode):
-    down = CG.CGEventCreateKeyboardEvent(None, keycode, True)
-    up = CG.CGEventCreateKeyboardEvent(None, keycode, False)
-    if modifier_flag:
-        CG.CGEventSetFlags(down, modifier_flag)
-        CG.CGEventSetFlags(up, modifier_flag)
-    CG.CGEventPost(CG.kCGHIDEventTap, down)
-    CG.CGEventPost(CG.kCGHIDEventTap, up)
-
 def trigger_mission_control():
-    post_key_combo(CG.kCGEventFlagMaskControl, 126)
+    # 100% reliable native app launch in macOS
+    subprocess.Popen(["open", "-a", "Mission Control"])
 
 def trigger_app_expose():
-    post_key_combo(CG.kCGEventFlagMaskControl, 125)
+    subprocess.Popen(["osascript", "-e", 'tell application "System Events" to key code 125 using {control down}'])
 
 def trigger_switch_space_left():
-    post_key_combo(CG.kCGEventFlagMaskControl, 123)
+    subprocess.Popen(["osascript", "-e", 'tell application "System Events" to key code 123 using {control down}'])
 
 def trigger_switch_space_right():
-    post_key_combo(CG.kCGEventFlagMaskControl, 124)
+    subprocess.Popen(["osascript", "-e", 'tell application "System Events" to key code 124 using {control down}'])
 
 def trigger_show_desktop():
-    post_key_combo(0, 103)
+    subprocess.Popen(["osascript", "-e", 'tell application "System Events" to key code 103'])
 
 def quartz_move(dx, dy):
     loc = CG.CGEventGetLocation(CG.CGEventCreate(None))
@@ -61,7 +54,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Mac Trackpad UDP Ultra</title>
+  <title>Mac Trackpad Haptic UDP</title>
   <style>
     * { box-sizing: border-box; touch-action: none; user-select: none; -webkit-user-select: none; }
     body, html {
@@ -88,14 +81,14 @@ HTML_CONTENT = """<!DOCTYPE html>
       position: relative;
     }
     #quick-bar {
-      display: flex; height: 44px; background: #121212; border-top: 1px solid #222;
+      display: flex; height: 46px; background: #121212; border-top: 1px solid #222;
     }
     .qbtn {
       flex: 1; background: transparent; border: none; border-right: 1px solid #202020;
-      color: #999; font-size: 11px; font-weight: 700; text-transform: uppercase;
+      color: #aaa; font-size: 11px; font-weight: 700; text-transform: uppercase;
       -webkit-tap-highlight-color: transparent;
     }
-    .qbtn:active { background: #333; color: #fff; }
+    .qbtn:active { background: #333; color: #00e676; }
     #buttons {
       display: flex; height: 75px; border-top: 1px solid #222;
     }
@@ -110,7 +103,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 </head>
 <body>
   <div id="status-bar">
-    <span>Trackpad WebRTC UDP</span>
+    <span>Trackpad Pro Haptic</span>
     <span id="status" class="disconnected">Connecting...</span>
   </div>
   <div id="gesture-hint"></div>
@@ -119,7 +112,7 @@ HTML_CONTENT = """<!DOCTYPE html>
     <b>2 Jari:</b> Smooth Scroll & Tap Klik Kanan<br>
     <b>3/4 Jari Geser Atas:</b> Mission Control<br>
     <b>3/4 Jari Geser Bawah:</b> App Exposé<br>
-    <b>3/4 Jari Geser Kiri/Kanan:</b> Pindah Desktop
+    <b>3/4 Jari Geser Kiri/Kanan:</b> Pindah Space
   </div>
   <div id="quick-bar">
     <button class="qbtn" id="qb-mc">Mission Control</button>
@@ -136,6 +129,13 @@ HTML_CONTENT = """<!DOCTYPE html>
     const statusEl = document.getElementById('status');
     const hintEl = document.getElementById('gesture-hint');
     const pad = document.getElementById('pad');
+
+    // Haptic feedback function
+    function vibrate(pattern = 15) {
+      if (navigator.vibrate) {
+        navigator.vibrate(pattern);
+      }
+    }
 
     function showHint(text) {
       hintEl.textContent = text;
@@ -155,7 +155,6 @@ HTML_CONTENT = """<!DOCTYPE html>
       view.setInt16(1, v1);
       view.setInt16(3, v2);
 
-      // Prefer WebRTC DataChannel (UDP Unreliable)
       if (dc && dc.readyState === 'open') {
         dc.send(buf);
       } else if (ws && ws.readyState === WebSocket.OPEN) {
@@ -164,20 +163,14 @@ HTML_CONTENT = """<!DOCTYPE html>
     }
 
     async function initWebRTC() {
-      pc = new RTCPeerConnection({
-        iceServers: []
-      });
-
-      // SCTP / UDP unordered & no retransmissions for lowest latency
-      dc = pc.createDataChannel('mouse', {
-        ordered: false,
-        maxRetransmits: 0
-      });
+      pc = new RTCPeerConnection({ iceServers: [] });
+      dc = pc.createDataChannel('mouse', { ordered: false, maxRetransmits: 0 });
       dc.binaryType = 'arraybuffer';
 
       dc.onopen = () => {
-        statusEl.textContent = 'UDP Direct (0ms Jitter)';
+        statusEl.textContent = 'UDP Direct + Haptics';
         statusEl.className = 'connected';
+        vibrate([30, 50, 30]);
       };
       dc.onclose = () => {
         statusEl.textContent = 'Reconnecting...';
@@ -196,7 +189,6 @@ HTML_CONTENT = """<!DOCTYPE html>
       await pc.setRemoteDescription(answer);
     }
 
-    // Fallback WebSocket
     function connectWS() {
       const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       ws = new WebSocket(`${wsProto}//${location.hostname}:8000/ws`);
@@ -212,7 +204,6 @@ HTML_CONTENT = """<!DOCTYPE html>
 
     initWebRTC().catch(() => connectWS());
 
-    // Acceleration curve for mouse pointer
     function accelerate(delta) {
       const abs = Math.abs(delta);
       const sign = Math.sign(delta);
@@ -237,7 +228,6 @@ HTML_CONTENT = """<!DOCTYPE html>
       return { x: x / touches.length, y: y / touches.length };
     }
 
-    // Use Pointer events with pointerrawupdate if supported
     pad.addEventListener('touchstart', (e) => {
       e.preventDefault();
       const count = e.touches.length;
@@ -262,10 +252,11 @@ HTML_CONTENT = """<!DOCTYPE html>
         if (!gestureTriggered) {
           const deltaX = center.x - startX;
           const deltaY = center.y - startY;
-          const THRESHOLD = 40;
+          const THRESHOLD = 35;
 
           if (Math.abs(deltaY) > THRESHOLD || Math.abs(deltaX) > THRESHOLD) {
             gestureTriggered = true;
+            vibrate(35); // Haptic for gestures
             if (Math.abs(deltaY) > Math.abs(deltaX)) {
               if (deltaY < 0) {
                 showHint('Mission Control');
@@ -315,20 +306,49 @@ HTML_CONTENT = """<!DOCTYPE html>
       if (e.touches.length === 0) {
         const elapsed = performance.now() - touchStartTime;
         if (!gestureTriggered && elapsed < 250 && totalMoved < 8) {
-          if (maxFingers === 1) sendBinary(3, 0);
-          else if (maxFingers === 2) sendBinary(3, 1);
+          if (maxFingers === 1) {
+            vibrate(15);
+            sendBinary(3, 0);
+          } else if (maxFingers === 2) {
+            vibrate([15, 30, 15]);
+            sendBinary(3, 1);
+          }
         }
         maxFingers = 0;
         gestureTriggered = false;
       }
     }, { passive: false });
 
-    document.getElementById('btn-left').addEventListener('pointerdown', (e) => { e.preventDefault(); sendBinary(3, 0); });
-    document.getElementById('btn-right').addEventListener('pointerdown', (e) => { e.preventDefault(); sendBinary(3, 1); });
-    document.getElementById('qb-mc').addEventListener('click', () => { showHint('Mission Control'); sendBinary(4, 1); });
-    document.getElementById('qb-desk').addEventListener('click', () => { showHint('Show Desktop'); sendBinary(4, 5); });
-    document.getElementById('qb-left').addEventListener('click', () => { showHint('◀ Desktop Left'); sendBinary(4, 3); });
-    document.getElementById('qb-right').addEventListener('click', () => { showHint('Desktop Right ▶'); sendBinary(4, 4); });
+    document.getElementById('btn-left').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      vibrate(20);
+      sendBinary(3, 0);
+    });
+    document.getElementById('btn-right').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      vibrate([20, 30, 20]);
+      sendBinary(3, 1);
+    });
+    document.getElementById('qb-mc').addEventListener('click', () => {
+      vibrate(30);
+      showHint('Mission Control');
+      sendBinary(4, 1);
+    });
+    document.getElementById('qb-desk').addEventListener('click', () => {
+      vibrate(30);
+      showHint('Show Desktop');
+      sendBinary(4, 5);
+    });
+    document.getElementById('qb-left').addEventListener('click', () => {
+      vibrate(30);
+      showHint('◀ Desktop Left');
+      sendBinary(4, 3);
+    });
+    document.getElementById('qb-right').addEventListener('click', () => {
+      vibrate(30);
+      showHint('Desktop Right ▶');
+      sendBinary(4, 4);
+    });
   </script>
 </body>
 </html>
@@ -423,7 +443,7 @@ async def run_server():
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', 8000)
     await site.start()
-    print(f"\\n=== TRACKPAD WEBRTC UDP (ZERO JITTER) SIAP ===")
+    print(f"\\n=== TRACKPAD HAPTIC UDP READY ===")
     print(f"Buka di Poco X7: http://{ip}:8000\\n")
     await asyncio.Future()
 
